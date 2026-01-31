@@ -1,0 +1,11 @@
+﻿stop_id,stop_name,lat,lon,mode
+ST01,Spadina Station,43.6672,-79.4037,subway
+ST02,St George Station,43.6680,-79.3999,subway
+ST03,Queen's Park Station,43.6597,-79.3903,subway
+ST04,College Station,43.6611,-79.3830,subway
+ST05,Dundas West Station,43.6561,-79.4521,subway
+ST06,Broadview Station,43.6762,-79.3589,subway
+BS01,Bloor St W & Bathurst,43.6679,-79.4112,bus
+BS02,College St & Spadina,43.6573,-79.4006,streetcar
+BS03,Queen St E & Broadview,43.6615,-79.3514,streetcar
+BS04,Gerrard St E & Jones,43.6724,-79.3382,streetcar

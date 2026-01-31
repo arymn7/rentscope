@@ -1,0 +1,53 @@
+﻿version: "3.9"
+services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  mcp_server:
+    build: ./mcp_server
+    environment:
+      - DATA_DIR=/data/sample
+    volumes:
+      - ./mcp_server:/app
+      - ./data:/data
+    ports:
+      - "7000:7000"
+    depends_on:
+      - mongo
+
+  orchestrator:
+    build: ./orchestrator
+    environment:
+      - ORCH_PORT=4000
+      - MCP_URL=http://mcp_server:7000
+      - MONGO_URI=mongodb://mongo:27017
+      - MONGO_DB=utrahacks
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=gemini-1.5-flash
+    volumes:
+      - ./orchestrator:/app
+      - /app/node_modules
+    ports:
+      - "4000:4000"
+    depends_on:
+      - mongo
+      - mcp_server
+
+  frontend:
+    build: ./frontend
+    environment:
+      - NEXT_PUBLIC_ORCHESTRATOR_URL=http://localhost:4000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    depends_on:
+      - orchestrator
+
+volumes:
+  mongo_data:

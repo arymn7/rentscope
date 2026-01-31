@@ -1,0 +1,13 @@
+﻿{
+  "candidates": [
+    { "id": "cand1", "label": "Annex - Bloor St W", "lat": 43.6684, "lon": -79.4031 },
+    { "id": "cand2", "label": "Kensington Market", "lat": 43.6543, "lon": -79.4006 },
+    { "id": "cand3", "label": "Leslieville", "lat": 43.6626, "lon": -79.3369 }
+  ],
+  "preferences": {
+    "weights": { "safety": 0.4, "transit": 0.4, "amenities": 0.2 },
+    "radius_m": 1000,
+    "window_days": 30,
+    "poi_categories": ["grocery", "cafe", "library"]
+  }
+}
