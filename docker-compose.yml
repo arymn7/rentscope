@@ -27,6 +27,8 @@
       - MONGO_DB=utrahacks
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=gemini-1.5-flash
+    env_file:
+      - .env
     volumes:
       - ./orchestrator:/app
       - /app/node_modules

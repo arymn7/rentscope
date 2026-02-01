@@ -5,9 +5,12 @@ import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   AmenitiesAgentSchema,
+  AreaRankingSchema,
+  AreaSummarySchema,
   AggregatorSchema,
   SafetyAgentSchema,
-  TransitAgentSchema
+  TransitAgentSchema,
+  WhatIfSummarySchema
 } from "./schemas.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -17,7 +20,10 @@ const PROMPTS = {
   safety: readFileSync(path.join(PROMPTS_DIR, "safety.txt"), "utf8"),
   transit: readFileSync(path.join(PROMPTS_DIR, "transit.txt"), "utf8"),
   amenities: readFileSync(path.join(PROMPTS_DIR, "amenities.txt"), "utf8"),
-  aggregator: readFileSync(path.join(PROMPTS_DIR, "aggregator.txt"), "utf8")
+  aggregator: readFileSync(path.join(PROMPTS_DIR, "aggregator.txt"), "utf8"),
+  whatIf: readFileSync(path.join(PROMPTS_DIR, "what_if.txt"), "utf8"),
+  areaRanking: readFileSync(path.join(PROMPTS_DIR, "area_ranking.txt"), "utf8"),
+  areaSummary: readFileSync(path.join(PROMPTS_DIR, "area_summary.txt"), "utf8")
 };
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "";
@@ -191,6 +197,88 @@ export async function runAggregatorAgent(payload: unknown) {
     }
 
     return AggregatorSchema.parse({ ranking, details });
+  }
+}
+
+export async function runAreaRanking(payload: unknown) {
+  try {
+    return await runAgentWithRetry(PROMPTS.areaRanking, payload, AreaRankingSchema);
+  } catch {
+    const data = payload as {
+      areas: Array<{
+        area_id: string;
+        label: string;
+        center: { lat: number; lon: number };
+        subscores: { affordability: number; safety: number; transit: number; amenities: number };
+        evidence: { metric: string; value: string; source: string }[];
+      }>;
+    };
+    const ranking = [...data.areas]
+      .sort((a, b) => {
+        const scoreA =
+          a.subscores.affordability +
+          a.subscores.safety +
+          a.subscores.transit +
+          a.subscores.amenities;
+        const scoreB =
+          b.subscores.affordability +
+          b.subscores.safety +
+          b.subscores.transit +
+          b.subscores.amenities;
+        return scoreB - scoreA;
+      })
+      .map((area) => ({
+        area_id: area.area_id,
+        label: area.label,
+        overall_score_0_100: Math.round(
+          (area.subscores.affordability +
+            area.subscores.safety +
+            area.subscores.transit +
+            area.subscores.amenities) /
+            4
+        ),
+        summary: "Weighted score based on rent, safety, transit, and amenities.",
+        key_tradeoffs: [
+          `Affordability ${area.subscores.affordability}, Safety ${area.subscores.safety}, Transit ${area.subscores.transit}, Amenities ${area.subscores.amenities}`
+        ]
+      }));
+
+    const details: Record<string, any> = {};
+    for (const area of data.areas) {
+      details[area.area_id] = {
+        label: area.label,
+        center: area.center,
+        subscores: area.subscores,
+        pros: [],
+        cons: [],
+        evidence: area.evidence
+      };
+    }
+
+    return AreaRankingSchema.parse({ ranking, details });
+  }
+}
+
+export async function runAreaSummary(payload: unknown) {
+  try {
+    return await runAgentWithRetry(PROMPTS.areaSummary, payload, AreaSummarySchema);
+  } catch {
+    return AreaSummarySchema.parse({
+      summary: "Summary unavailable due to missing data.",
+      amenities: [],
+      highlights: []
+    });
+  }
+}
+
+export async function runWhatIfSummary(payload: unknown) {
+  try {
+    return await runAgentWithRetry(PROMPTS.whatIf, payload, WhatIfSummarySchema);
+  } catch {
+    return WhatIfSummarySchema.parse({
+      summary: "What-if analysis completed. Review ranking changes for tradeoffs.",
+      key_changes: ["Compare top ranking shifts", "Adjust budget or commute tolerance as needed"]
+    });
   }
 }
 

@@ -18,9 +18,16 @@ type MapViewProps = {
   candidates: Candidate[];
   overlay?: GeoJSON.GeoJsonObject | null;
   heatmapScale?: { stops: Array<{ value: number; color: string }>; min: number; max: number } | null;
+  heatmapMetric?: "avg_price" | "count";
   selectedCellId?: string | null;
   onAdd?: (lat: number, lon: number) => void;
-  onSelectRegion?: (payload: { cellId: string; avgPrice: number; count: number }) => void;
+  onSelectRegion?: (payload: {
+    cellId: string;
+    avgPrice?: number;
+    count: number;
+    lat: number;
+    lon: number;
+  }) => void;
   onBoundsChange?: (bounds: { latMin: number; latMax: number; lonMin: number; lonMax: number }) => void;
 };
 
@@ -86,6 +93,7 @@ export default function MapView({
   candidates,
   overlay,
   heatmapScale,
+  heatmapMetric = "avg_price",
   selectedCellId,
   onAdd,
   onSelectRegion,
@@ -105,15 +113,14 @@ export default function MapView({
         <GeoJSON
           data={overlay as GeoJSON.GeoJsonObject}
           style={(feature) => {
-            const props = feature?.properties as
-              | { avg_price?: number; cell_id?: string }
-              | undefined;
-            const avgPrice = props?.avg_price;
-            const cellId = props?.cell_id;
+            const props = feature?.properties as Record<string, number> | undefined;
+            const metricValue =
+              props && heatmapMetric in props ? (props[heatmapMetric] as number) : undefined;
+            const cellId = (feature?.properties as { cell_id?: string } | undefined)?.cell_id;
             const isSelected = selectedCellId && cellId === selectedCellId;
             const fillColor =
-              typeof avgPrice === "number" && heatmapScale
-                ? colorForValue(avgPrice, heatmapScale.stops, "#f4f1ea")
+              typeof metricValue === "number" && heatmapScale
+                ? colorForValue(metricValue, heatmapScale.stops, "#f4f1ea")
                 : "#f4f1ea";
             return {
               color: isSelected ? "#111827" : "#f1e3d2",
@@ -128,11 +135,27 @@ export default function MapView({
                 const props = feature?.properties as
                   | { avg_price?: number; count?: number; cell_id?: string }
                   | undefined;
-                if (!props?.cell_id || typeof props.avg_price !== "number") return;
+                if (!props?.cell_id) return;
+                const geom = feature?.geometry as
+                  | { type: string; coordinates: number[][][] }
+                  | undefined;
+                let centroidLat = 0;
+                let centroidLon = 0;
+                if (geom?.type === "Polygon" && geom.coordinates?.[0]?.length) {
+                  const coords = geom.coordinates[0];
+                  const sum = coords.reduce(
+                    (acc, item) => [acc[0] + item[1], acc[1] + item[0]],
+                    [0, 0]
+                  );
+                  centroidLat = sum[0] / coords.length;
+                  centroidLon = sum[1] / coords.length;
+                }
                 onSelectRegion?.({
                   cellId: props.cell_id,
                   avgPrice: props.avg_price,
-                  count: props.count ?? 0
+                  count: props.count ?? 0,
+                  lat: centroidLat,
+                  lon: centroidLon
                 });
               }
             });
