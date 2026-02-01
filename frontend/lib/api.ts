@@ -98,6 +98,36 @@ export async function geocode(
   };
 }
 
+export async function fetchRentPoints(bounds: {
+  latMin: number;
+  latMax: number;
+  lonMin: number;
+  lonMax: number;
+}) {
+  const params = new URLSearchParams({
+    lat_min: String(bounds.latMin),
+    lat_max: String(bounds.latMax),
+    lon_min: String(bounds.lonMin),
+    lon_max: String(bounds.lonMax),
+    limit: "250"
+  });
+  const response = await fetch(`${ORCH_URL}/api/rent_points?${params.toString()}`);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || "Failed to load rent points");
+  }
+  return response.json() as Promise<{
+    results: Array<{
+      lat: number;
+      lon: number;
+      price: string;
+      bedroom: number;
+      bathroom: number;
+      den: number;
+    }>;
+  }>;
+}
+
 export async function reverseGeocode(lat: number, lon: number) {
   if (!MAPBOX_TOKEN) {
     throw new Error("Missing Mapbox token.");

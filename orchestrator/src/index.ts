@@ -104,6 +104,28 @@ app.post("/api/analyze", async (req, res) => {
   }
 });
 
+app.get("/api/rent_points", async (req, res) => {
+  const latMin = Number(req.query.lat_min);
+  const latMax = Number(req.query.lat_max);
+  const lonMin = Number(req.query.lon_min);
+  const lonMax = Number(req.query.lon_max);
+  const limit = req.query.limit ? Number(req.query.limit) : 200;
+
+  if (![latMin, latMax, lonMin, lonMax].every((v) => Number.isFinite(v))) {
+    return res.status(400).json({ error: "lat_min/lat_max/lon_min/lon_max required" });
+  }
+
+  try {
+    const data = await callMcpTool("rent_points", {
+      bounds: { lat_min: latMin, lat_max: latMax, lon_min: lonMin, lon_max: lonMax },
+      limit
+    });
+    return res.json(data);
+  } catch (error) {
+    return res.status(500).json({ error: (error as Error).message });
+  }
+});
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }

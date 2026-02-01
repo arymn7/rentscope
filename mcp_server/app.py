@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from snowflake_client import snowflake_configured, fetch_crime_events, fetch_ttc_stops
+from snowflake_client import snowflake_configured, fetch_crime_events, fetch_ttc_stops, fetch_rent_prices
 
 load_dotenv()
 
@@ -21,6 +21,7 @@ MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB = os.getenv("MONGO_DB", "utrahacks")
 POI_CACHE_COLLECTION = os.getenv("POI_CACHE_COLLECTION", "poi_cache")
 POI_CACHE_TTL_SEC = int(os.getenv("POI_CACHE_TTL_SEC", "21600"))
+RENT_TABLE = os.getenv("SNOWFLAKE_RENT_TABLE", "TORONTO_RENT_PRICES")
 
 app = FastAPI(title="Utrahacks MCP Server")
 
@@ -397,7 +398,19 @@ def rent_grid(
     if RENT_DF is None or RENT_DF.empty:
         return {"type": "FeatureCollection", "features": [], "source": "rent-prices"}
 
-    df = RENT_DF.copy()
+    if snowflake_configured():
+        if not bounds:
+            return {"type": "FeatureCollection", "features": [], "source": "rent-prices"}
+        df = fetch_rent_prices(
+            bounds["lat_min"],
+            bounds["lat_max"],
+            bounds["lon_min"],
+            bounds["lon_max"],
+            RENT_TABLE
+        )
+        df = df.rename(columns={"lat": "Lat", "lon": "Long", "price": "Price"})
+    else:
+        df = RENT_DF.copy()
 
     if bounds:
         df = df[
@@ -461,6 +474,49 @@ def rent_grid(
         )
 
     return {"type": "FeatureCollection", "features": features, "source": "rent-prices"}
+
+
+def rent_points(bounds: Dict[str, float] | None, limit: int):
+    if not bounds:
+        return {"results": [], "source": "rent-prices"}
+
+    if snowflake_configured():
+        df = fetch_rent_prices(
+            bounds["lat_min"],
+            bounds["lat_max"],
+            bounds["lon_min"],
+            bounds["lon_max"],
+            RENT_TABLE
+        )
+        df = df.rename(columns={"lat": "Lat", "lon": "Long", "price": "Price"})
+    else:
+        ensure_data_loaded()
+        df = RENT_DF.copy()
+        df = df[
+            (df["Lat"] >= bounds["lat_min"])
+            & (df["Lat"] <= bounds["lat_max"])
+            & (df["Long"] >= bounds["lon_min"])
+            & (df["Long"] <= bounds["lon_max"])
+        ]
+
+    if df.empty:
+        return {"results": [], "source": "rent-prices"}
+
+    df = df.dropna(subset=["Lat", "Long", "Price"])
+    df = df.head(limit)
+    results = []
+    for _, row in df.iterrows():
+        results.append(
+            {
+                "lat": float(row["Lat"]),
+                "lon": float(row["Long"]),
+                "price": str(row["Price"]),
+                "bedroom": int(row.get("Bedroom", 0)),
+                "bathroom": int(row.get("Bathroom", 0)),
+                "den": int(row.get("Den", 0))
+            }
+        )
+    return {"results": results, "source": "rent-prices"}
 
 
 def crime_grid(bounds: Dict[str, float] | None, cell_km: float, min_count: int):
@@ -575,6 +631,12 @@ async def mcp(request: MCPRequest):
                 bounds=bounds if isinstance(bounds, dict) else None,
                 cell_km=float(args.get("cell_km", 1.0)),
                 min_count=int(args.get("min_count", 3))
+            )
+        elif tool == "rent_points":
+            bounds = args.get("bounds")
+            data = rent_points(
+                bounds=bounds if isinstance(bounds, dict) else None,
+                limit=int(args.get("limit", 200))
             )
         else:
             return {"ok": False, "error": "Unknown tool"}

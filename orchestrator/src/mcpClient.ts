@@ -3,7 +3,8 @@
   | "commute_proxy"
   | "nearby_pois"
   | "rent_grid"
-  | "crime_grid";
+  | "crime_grid"
+  | "rent_points";
 
 const MCP_URL = process.env.MCP_URL ?? "http://localhost:7000";
 

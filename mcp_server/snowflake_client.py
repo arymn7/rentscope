@@ -63,3 +63,25 @@ def fetch_ttc_stops(lat_min: float, lat_max: float, lon_min: float, lon_max: flo
         "lon_min": lon_min,
         "lon_max": lon_max
     })
+
+
+def fetch_rent_prices(lat_min: float, lat_max: float, lon_min: float, lon_max: float, table_name: str) -> pd.DataFrame:
+    sql = f"""
+        SELECT
+          "Bedroom" AS bedroom,
+          "Bathroom" AS bathroom,
+          "Den" AS den,
+          "Address" AS address,
+          "Lat" AS lat,
+          "Long" AS lon,
+          "Price" AS price
+        FROM {table_name}
+        WHERE "Lat" BETWEEN %(lat_min)s AND %(lat_max)s
+          AND "Long" BETWEEN %(lon_min)s AND %(lon_max)s
+    """
+    return query_dataframe(sql, {
+        "lat_min": lat_min,
+        "lat_max": lat_max,
+        "lon_min": lon_min,
+        "lon_max": lon_max
+    })

@@ -1,7 +1,16 @@
 ﻿"use client";
 
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, GeoJSON } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  useMapEvents,
+  GeoJSON,
+  CircleMarker,
+  Tooltip
+} from "react-leaflet";
 import L, { LatLngExpression } from "leaflet";
 import { useMemo } from "react";
 
@@ -16,6 +25,14 @@ export type Candidate = {
 type MapViewProps = {
   center: LatLngExpression;
   candidates: Candidate[];
+  listings?: Array<{
+    lat: number;
+    lon: number;
+    price: string;
+    bedroom: number;
+    bathroom: number;
+    den: number;
+  }>;
   overlay?: GeoJSON.GeoJsonObject | null;
   heatmapScale?: { stops: Array<{ value: number; color: string }>; min: number; max: number } | null;
   heatmapMetric?: "avg_price" | "count";
@@ -91,6 +108,7 @@ function colorForValue(
 export default function MapView({
   center,
   candidates,
+  listings = [],
   overlay,
   heatmapScale,
   heatmapMetric = "avg_price",
@@ -173,6 +191,23 @@ export default function MapView({
             <div>{candidate.rank ? `Rank #${candidate.rank}` : "Unranked"}</div>
           </Popup>
         </Marker>
+      ))}
+      {listings.map((listing, index) => (
+        <CircleMarker
+          key={`listing-${index}`}
+          center={[listing.lat, listing.lon]}
+          radius={5}
+          pathOptions={{ color: "#2563eb", fillColor: "#60a5fa", fillOpacity: 0.75 }}
+        >
+          <Tooltip direction="top" offset={[0, -6]} opacity={1}>
+            <div style={{ fontSize: "12px" }}>
+              <div>{listing.price}</div>
+              <div>
+                {listing.bedroom} bd · {listing.bathroom} ba{listing.den ? ` · ${listing.den} den` : ""}
+              </div>
+            </div>
+          </Tooltip>
+        </CircleMarker>
       ))}
     </MapContainer>
   );

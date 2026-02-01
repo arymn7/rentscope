@@ -3,11 +3,20 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import type { Candidate as MapCandidate } from "../components/MapView";
-import { analyze, areaSummary, geocode, reverseGeocode, whatIf, type AnalyzeResponse } from "../lib/api";
+import {
+  analyze,
+  areaSummary,
+  fetchRentPoints,
+  geocode,
+  reverseGeocode,
+  whatIf,
+  type AnalyzeResponse
+} from "../lib/api";
 
 const MapView = dynamic(() => import("../components/MapView"), { ssr: false });
 
 type AnchorType = "School" | "Work" | "Other";
+type WeightRank = "low" | "mid" | "high";
 
 type Anchor = MapCandidate & { kind: AnchorType };
 
@@ -28,7 +37,7 @@ export default function HomePage() {
   const [placeHighlight, setPlaceHighlight] = useState(0);
   const [placeKind, setPlaceKind] = useState<AnchorType>("Work");
   const [preferences, setPreferences] = useState({
-    weights: { safety: 0.4, transit: 0.4, amenities: 0.2 },
+    weights: { safety: "mid", transit: "mid", amenities: "low" } as Record<string, WeightRank>,
     radius_m: 1000,
     window_days: 30,
     poi_categories: ["grocery", "cafe", "library"],
@@ -63,6 +72,9 @@ export default function HomePage() {
   const [expandedAreaId, setExpandedAreaId] = useState<string | null>(null);
   const [areaAmenities, setAreaAmenities] = useState<Record<string, string[]>>({});
   const [areaLabels, setAreaLabels] = useState<Record<string, string>>({});
+  const [rentPoints, setRentPoints] = useState<
+    Array<{ lat: number; lon: number; price: string; bedroom: number; bathroom: number; den: number }>
+  >([]);
 
   const showSidebar = !analysis;
 
@@ -191,6 +203,23 @@ export default function HomePage() {
     });
   }, [analysis]);
 
+  useEffect(() => {
+    if (!mapBounds) return;
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      try {
+        const data = await fetchRentPoints(mapBounds);
+        if (!cancelled) setRentPoints(data.results);
+      } catch {
+        if (!cancelled) setRentPoints([]);
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [mapBounds]);
+
   function addPlace(lat: number, lon: number, label: string, kind: AnchorType) {
     const id = `place-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     setAnchors((prev) => [...prev, { id, label, lat, lon, kind }]);
@@ -253,6 +282,12 @@ export default function HomePage() {
     setLoading(true);
     setError(null);
     try {
+      const mappedWeights = Object.fromEntries(
+        Object.entries(preferences.weights).map(([key, rank]) => [
+          key,
+          rank === "high" ? 0.6 : rank === "mid" ? 0.4 : 0.2
+        ])
+      );
       const response = await analyze({
         candidates: allAnchors.map(({ id, label, lat, lon }) => ({ id, label, lat, lon })),
         map_bounds: mapBounds
@@ -263,7 +298,10 @@ export default function HomePage() {
               lon_max: mapBounds.lonMax
             }
           : undefined,
-        preferences
+        preferences: {
+          ...preferences,
+          weights: mappedWeights
+        }
       });
       setAnalysis(response);
       const ranked = response.map.markers.reduce<Record<string, number>>((acc, marker) => {
@@ -288,6 +326,12 @@ export default function HomePage() {
     setWhatIfLoading(true);
     setWhatIfError(null);
     try {
+      const mappedWeights = Object.fromEntries(
+        Object.entries(preferences.weights).map(([key, rank]) => [
+          key,
+          rank === "high" ? 0.6 : rank === "mid" ? 0.4 : 0.2
+        ])
+      );
       const response = await whatIf({
         candidates: allAnchors.map(({ id, label, lat, lon }) => ({ id, label, lat, lon })),
         map_bounds: mapBounds
@@ -298,7 +342,10 @@ export default function HomePage() {
               lon_max: mapBounds.lonMax
             }
           : undefined,
-        preferences,
+        preferences: {
+          ...preferences,
+          weights: mappedWeights
+        },
         what_if: {
           budget_delta: whatIfBudget,
           commute_delta_min: whatIfCommute
@@ -321,14 +368,9 @@ export default function HomePage() {
     <div className="min-h-screen bg-mesh px-6 py-8 text-ink">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <header className="rounded-3xl bg-white/80 p-6 shadow-soft backdrop-blur">
-          <p className="text-sm uppercase tracking-[0.2em] text-ink/60">Hackathon MVP</p>
-          <h1 className="mt-2 font-display text-3xl md:text-4xl">
-            Toronto Student Housing Map Assistant
-          </h1>
+          <h1 className="mt-1 font-display text-3xl md:text-4xl">RentScope</h1>
           <p className="mt-2 max-w-2xl text-base text-ink/70">
-            Select your school and add other frequent places (work, gym, etc.) to generate a rent
-            heatmap and neighborhood recommendations. All safety/transit/amenity signals come from
-            the available open data sources.
+            Add your school and key spots to reveal rent hot zones and neighborhood picks.
           </p>
         </header>
 
@@ -348,6 +390,7 @@ export default function HomePage() {
                 <MapView
                   center={mapCenter}
                   candidates={displayMarkers}
+                  listings={rentPoints}
                   overlay={activeOverlay ?? null}
                   heatmapScale={heatmapScale}
                   heatmapMetric="avg_price"
@@ -619,20 +662,20 @@ export default function HomePage() {
                 {(["safety", "transit", "amenities"] as const).map((key) => (
                   <label key={key} className="flex flex-col gap-1">
                     <span className="uppercase text-ink/50">{key}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={1}
-                      step={0.1}
+                    <select
                       value={preferences.weights[key]}
-                      onChange={(event) =>
+                      onChange={(event) => {
                         setPreferences((prev) => ({
                           ...prev,
-                          weights: { ...prev.weights, [key]: Number(event.target.value) }
-                        }))
-                      }
+                          weights: { ...prev.weights, [key]: event.target.value as WeightRank }
+                        }));
+                      }}
                       className="rounded-lg border border-ink/10 px-2 py-1"
-                    />
+                    >
+                      <option value="low">Low</option>
+                      <option value="mid">Mid</option>
+                      <option value="high">High</option>
+                    </select>
                   </label>
                 ))}
               </div>
@@ -884,7 +927,7 @@ export default function HomePage() {
                       <ul className="mt-1 list-disc pl-4">
                         {details.evidence.map((entry, index) => (
                           <li key={`${item.candidate_id}-e-${index}`}>
-                            {entry.metric.replace("POI", "Amenities")}: {entry.value} ({entry.source})
+                            {entry.metric.replace("POI", "Amenities")}: {entry.value}
                           </li>
                         ))}
                       </ul>
