@@ -475,18 +475,32 @@ app.post("/api/area_summary", async (req, res) => {
     return res.status(400).json({ error: "lat/lon required" });
   }
   try {
-    const crimeSummary = await callMcpTool("crime_summary", {
-      lat,
-      lon,
-      radius_m: 1000,
-      window_days: 365
-    });
-    const nearbyPois = await callMcpTool("nearby_pois", {
-      lat,
-      lon,
-      categories: ["grocery", "cafe", "library", "pharmacy"],
-      radius_m: 1000
-    });
+    const crimeParams = { radius_m: 600, window_days: 365 };
+    const poiParams = { categories: ["grocery", "cafe"], radius_m: 600 };
+
+    const cachedCrime = await getCached("crime_summary", lat, lon, crimeParams);
+    const crimeSummary =
+      cachedCrime ??
+      (await callMcpTool("crime_summary", {
+        lat,
+        lon,
+        ...crimeParams
+      }));
+    if (!cachedCrime) {
+      await setCached("crime_summary", lat, lon, crimeParams, crimeSummary);
+    }
+
+    const cachedPois = await getCached("nearby_pois", lat, lon, poiParams);
+    const nearbyPois =
+      cachedPois ??
+      (await callMcpTool("nearby_pois", {
+        lat,
+        lon,
+        ...poiParams
+      }));
+    if (!cachedPois) {
+      await setCached("nearby_pois", lat, lon, poiParams, nearbyPois);
+    }
 
     const payload = {
       label: label ?? "Selected area",

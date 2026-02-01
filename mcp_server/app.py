@@ -20,7 +20,7 @@ DATA_DIR = os.getenv("DATA_DIR", os.path.join(os.path.dirname(__file__), "..", "
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB = os.getenv("MONGO_DB", "utrahacks")
 POI_CACHE_COLLECTION = os.getenv("POI_CACHE_COLLECTION", "poi_cache")
-POI_CACHE_TTL_SEC = int(os.getenv("POI_CACHE_TTL_SEC", "21600"))
+POI_CACHE_TTL_SEC = int(os.getenv("POI_CACHE_TTL_SEC", "86400"))
 RENT_TABLE = os.getenv("SNOWFLAKE_RENT_TABLE", "TORONTO_RENT_PRICES")
 
 app = FastAPI(title="Utrahacks MCP Server")
@@ -300,7 +300,8 @@ def _overpass_categories(categories: List[str]) -> List[Dict[str, str]]:
 
 def nearby_pois(lat: float, lon: float, categories: List[str], radius_m: float):
     # Keep Overpass load low to avoid 429s.
-    radius_m = max(100, min(radius_m, 1000))
+    radius_m = max(100, min(radius_m, 800))
+    categories = [cat for cat in categories if cat][:2]
     tags = _overpass_categories(categories)
     if not tags:
         return {"results": [], "counts_by_category": {}, "source": "Overpass API"}

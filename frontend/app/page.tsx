@@ -38,9 +38,9 @@ export default function HomePage() {
   const [placeKind, setPlaceKind] = useState<AnchorType>("Work");
   const [preferences, setPreferences] = useState({
     weights: { safety: "mid", transit: "mid", amenities: "low" } as Record<string, WeightRank>,
-    radius_m: 1000,
+    radius_m: 600,
     window_days: 30,
-    poi_categories: ["grocery", "cafe", "library"],
+    poi_categories: ["grocery", "cafe"],
     price_range: { min: 1600, max: 2600 }
   });
   const [analysis, setAnalysis] = useState<AnalyzeResponse | null>(null);
