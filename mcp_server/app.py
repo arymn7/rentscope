@@ -34,6 +34,7 @@ class MCPRequest(BaseModel):
 CRIME_DF: pd.DataFrame | None = None
 TTC_DF: pd.DataFrame | None = None
 POI_DF: pd.DataFrame | None = None
+RENT_DF: pd.DataFrame | None = None
 
 
 @app.get("/health")
@@ -52,7 +53,7 @@ def haversine_km(lat1, lon1, lat2, lon2):
 
 
 def ensure_data_loaded():
-    global CRIME_DF, TTC_DF, POI_DF
+    global CRIME_DF, TTC_DF, POI_DF, RENT_DF
     if CRIME_DF is None:
         crime_path = os.path.join(DATA_DIR, "crime_events.csv")
         CRIME_DF = pd.read_csv(crime_path, parse_dates=["event_date"])
@@ -62,6 +63,31 @@ def ensure_data_loaded():
     if POI_DF is None:
         poi_path = os.path.join(DATA_DIR, "pois.csv")
         POI_DF = pd.read_csv(poi_path)
+    if RENT_DF is None:
+        rent_dir = os.getenv(
+            "RENT_DATA_DIR",
+            os.path.join(os.path.dirname(__file__), "..", "data", "rent-prices")
+        )
+        files = [
+            os.path.join(rent_dir, name)
+            for name in os.listdir(rent_dir)
+            if name.lower().endswith(".csv")
+        ]
+        frames = []
+        for path in files:
+            df = pd.read_csv(path)
+            if {"Lat", "Long", "Price"}.issubset(df.columns):
+                frames.append(df)
+        RENT_DF = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        if not RENT_DF.empty:
+            RENT_DF["price_value"] = (
+                RENT_DF["Price"].astype(str)
+                .str.replace("$", "", regex=False)
+                .str.replace(",", "", regex=False)
+                .str.replace('"', "", regex=False)
+            )
+            RENT_DF["price_value"] = pd.to_numeric(RENT_DF["price_value"], errors="coerce")
+            RENT_DF = RENT_DF.dropna(subset=["price_value", "Lat", "Long"])
 
 
 def get_bbox(lat: float, lon: float, radius_m: float):
@@ -188,6 +214,83 @@ def nearby_pois(lat: float, lon: float, categories: List[str], radius_m: float):
     }
 
 
+def rent_grid(
+    bounds: Dict[str, float] | None,
+    cell_km: float,
+    min_count: int,
+    price_min: float | None,
+    price_max: float | None
+):
+    ensure_data_loaded()
+    if RENT_DF is None or RENT_DF.empty:
+        return {"type": "FeatureCollection", "features": [], "source": "rent-prices"}
+
+    df = RENT_DF.copy()
+
+    if bounds:
+        df = df[
+            (df["Lat"] >= bounds["lat_min"])
+            & (df["Lat"] <= bounds["lat_max"])
+            & (df["Long"] >= bounds["lon_min"])
+            & (df["Long"] <= bounds["lon_max"])
+        ]
+
+    if price_min is not None:
+        df = df[df["price_value"] >= price_min]
+    if price_max is not None:
+        df = df[df["price_value"] <= price_max]
+
+    if df.empty:
+        return {"type": "FeatureCollection", "features": [], "source": "rent-prices"}
+
+    lat_min = bounds["lat_min"] if bounds else df["Lat"].min()
+    lon_min = bounds["lon_min"] if bounds else df["Long"].min()
+    mean_lat = df["Lat"].mean()
+
+    delta_lat = cell_km / 111.0
+    delta_lon = cell_km / (111.0 * math.cos(math.radians(mean_lat)))
+
+    df["grid_x"] = ((df["Long"] - lon_min) / delta_lon).astype(int)
+    df["grid_y"] = ((df["Lat"] - lat_min) / delta_lat).astype(int)
+
+    grouped = (
+        df.groupby(["grid_x", "grid_y"])
+        .agg(avg_price=("price_value", "mean"), count=("price_value", "size"))
+        .reset_index()
+    )
+
+    features = []
+    for _, row in grouped.iterrows():
+        if row["count"] < min_count:
+            continue
+        x = int(row["grid_x"])
+        y = int(row["grid_y"])
+        cell_lon_min = lon_min + x * delta_lon
+        cell_lon_max = cell_lon_min + delta_lon
+        cell_lat_min = lat_min + y * delta_lat
+        cell_lat_max = cell_lat_min + delta_lat
+        polygon = [
+            [cell_lon_min, cell_lat_min],
+            [cell_lon_max, cell_lat_min],
+            [cell_lon_max, cell_lat_max],
+            [cell_lon_min, cell_lat_max],
+            [cell_lon_min, cell_lat_min]
+        ]
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "Polygon", "coordinates": [polygon]},
+                "properties": {
+                    "cell_id": f"{x}-{y}",
+                    "avg_price": round(float(row["avg_price"]), 2),
+                    "count": int(row["count"])
+                }
+            }
+        )
+
+    return {"type": "FeatureCollection", "features": features, "source": "rent-prices"}
+
+
 @app.post("/mcp")
 async def mcp(request: MCPRequest):
     try:
@@ -213,6 +316,15 @@ async def mcp(request: MCPRequest):
                 float(args["lon"]),
                 list(args["categories"]),
                 float(args["radius_m"])
+            )
+        elif tool == "rent_grid":
+            bounds = args.get("bounds")
+            data = rent_grid(
+                bounds=bounds if isinstance(bounds, dict) else None,
+                cell_km=float(args.get("cell_km", 1.0)),
+                min_count=int(args.get("min_count", 3)),
+                price_min=float(args["price_min"]) if args.get("price_min") is not None else None,
+                price_max=float(args["price_max"]) if args.get("price_max") is not None else None
             )
         else:
             return {"ok": False, "error": "Unknown tool"}

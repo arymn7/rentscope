@@ -1,4 +1,4 @@
-﻿export type MCPToolName = "crime_summary" | "commute_proxy" | "nearby_pois";
+﻿export type MCPToolName = "crime_summary" | "commute_proxy" | "nearby_pois" | "rent_grid";
 
 const MCP_URL = process.env.MCP_URL ?? "http://localhost:7000";
 

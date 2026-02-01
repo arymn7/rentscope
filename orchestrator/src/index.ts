@@ -29,11 +29,29 @@ app.get("/api/geocode", async (req, res) => {
     return res.status(400).json({ error: "Missing query" });
   }
 
+  const latMin = req.query.lat_min ? Number(req.query.lat_min) : null;
+  const latMax = req.query.lat_max ? Number(req.query.lat_max) : null;
+  const lonMin = req.query.lon_min ? Number(req.query.lon_min) : null;
+  const lonMax = req.query.lon_max ? Number(req.query.lon_max) : null;
+
   try {
     const url = new URL("https://nominatim.openstreetmap.org/search");
     url.searchParams.set("format", "json");
     url.searchParams.set("limit", "5");
     url.searchParams.set("q", query);
+    if (
+      latMin !== null &&
+      latMax !== null &&
+      lonMin !== null &&
+      lonMax !== null &&
+      Number.isFinite(latMin) &&
+      Number.isFinite(latMax) &&
+      Number.isFinite(lonMin) &&
+      Number.isFinite(lonMax)
+    ) {
+      url.searchParams.set("viewbox", `${lonMin},${latMax},${lonMax},${latMin}`);
+      url.searchParams.set("bounded", "1");
+    }
 
     const response = await fetch(url.toString(), {
       headers: {
@@ -66,6 +84,7 @@ app.post("/api/analyze", async (req, res) => {
 
   const { candidates, preferences } = parse.data;
   const weights = normalizeWeights(preferences.weights);
+  const campus = { lat: 43.6629, lon: -79.3957 };
 
   try {
     const db = await getDb();
@@ -86,7 +105,7 @@ app.post("/api/analyze", async (req, res) => {
 
     for (const candidate of candidates) {
       const crimeParams = { radius_m: preferences.radius_m, window_days: preferences.window_days };
-      const commuteParams = { campus_lat: 43.6629, campus_lon: -79.3957 };
+      const commuteParams = { campus_lat: campus.lat, campus_lon: campus.lon };
       const poiParams = { categories: preferences.poi_categories, radius_m: preferences.radius_m };
 
       const cachedCrime = await getCached("crime_summary", candidate.lat, candidate.lon, crimeParams);
@@ -178,12 +197,32 @@ app.post("/api/analyze", async (req, res) => {
       };
     });
 
+    let rentOverlay: unknown = null;
+    try {
+      const lats = [...candidates.map((c) => c.lat), campus.lat];
+      const lons = [...candidates.map((c) => c.lon), campus.lon];
+      const latMin = Math.min(...lats) - 0.02;
+      const latMax = Math.max(...lats) + 0.02;
+      const lonMin = Math.min(...lons) - 0.02;
+      const lonMax = Math.max(...lons) + 0.02;
+      const priceRange = preferences.price_range ?? { min: null, max: null };
+      rentOverlay = await callMcpTool("rent_grid", {
+        bounds: { lat_min: latMin, lat_max: latMax, lon_min: lonMin, lon_max: lonMax },
+        cell_km: 0.8,
+        min_count: 3,
+        price_min: priceRange.min,
+        price_max: priceRange.max
+      });
+    } catch (error) {
+      rentOverlay = null;
+    }
+
     const responsePayload = {
       ranking: aggregatorOutput.ranking,
       details: aggregatorOutput.details,
       map: {
         markers,
-        overlays: { geojson: null }
+        overlays: { geojson: rentOverlay }
       }
     };
 

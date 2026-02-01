@@ -15,6 +15,7 @@ export type AnalyzeRequest = {
     radius_m: number;
     window_days: number;
     poi_categories: string[];
+    price_range?: { min: number | null; max: number | null };
   };
 };
 
@@ -40,12 +41,42 @@ export type AnalyzeResponse = {
   };
 };
 
-export async function geocode(query: string) {
-  const response = await fetch(`${ORCH_URL}/api/geocode?query=${encodeURIComponent(query)}`);
-  if (!response.ok) {
-    throw new Error("Failed to geocode");
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+
+export async function geocode(
+  query: string,
+  bounds?: { latMin: number; latMax: number; lonMin: number; lonMax: number }
+) {
+  if (!MAPBOX_TOKEN) {
+    throw new Error("Missing Mapbox token.");
   }
-  return response.json() as Promise<{ results: Array<{ label: string; lat: number; lon: number }> }>;
+  const url = new URL(
+    `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json`
+  );
+  url.searchParams.set("access_token", MAPBOX_TOKEN);
+  url.searchParams.set("autocomplete", "true");
+  url.searchParams.set("limit", "6");
+  if (bounds) {
+    url.searchParams.set(
+      "bbox",
+      `${bounds.lonMin},${bounds.latMin},${bounds.lonMax},${bounds.latMax}`
+    );
+  }
+  const response = await fetch(url.toString());
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || "Failed to geocode");
+  }
+  const data = (await response.json()) as {
+    features: Array<{ place_name: string; center: [number, number] }>;
+  };
+  return {
+    results: data.features.map((feature) => ({
+      label: feature.place_name,
+      lat: feature.center[1],
+      lon: feature.center[0]
+    }))
+  };
 }
 
 export async function analyze(payload: AnalyzeRequest) {

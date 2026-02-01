@@ -17,7 +17,13 @@ export const AnalyzeRequestSchema = z.object({
     }),
     radius_m: z.number(),
     window_days: z.number(),
-    poi_categories: z.array(z.string())
+    poi_categories: z.array(z.string()),
+    price_range: z
+      .object({
+        min: z.number().nullable(),
+        max: z.number().nullable()
+      })
+      .optional()
   })
 });
 
