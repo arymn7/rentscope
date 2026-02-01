@@ -20,7 +20,7 @@ DATA_DIR = os.getenv("DATA_DIR", os.path.join(os.path.dirname(__file__), "..", "
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB = os.getenv("MONGO_DB", "utrahacks")
 POI_CACHE_COLLECTION = os.getenv("POI_CACHE_COLLECTION", "poi_cache")
-POI_CACHE_TTL_SEC = int(os.getenv("POI_CACHE_TTL_SEC", "86400"))
+POI_CACHE_TTL_SEC = int(os.getenv("POI_CACHE_TTL_SEC", "259200"))
 RENT_TABLE = os.getenv("SNOWFLAKE_RENT_TABLE", "TORONTO_RENT_PRICES")
 
 app = FastAPI(title="Utrahacks MCP Server")
@@ -300,7 +300,7 @@ def _overpass_categories(categories: List[str]) -> List[Dict[str, str]]:
 
 def nearby_pois(lat: float, lon: float, categories: List[str], radius_m: float):
     # Keep Overpass load low to avoid 429s.
-    radius_m = max(100, min(radius_m, 800))
+    radius_m = max(100, min(radius_m, 600))
     categories = [cat for cat in categories if cat][:2]
     tags = _overpass_categories(categories)
     if not tags:
@@ -319,18 +319,18 @@ def nearby_pois(lat: float, lon: float, categories: List[str], radius_m: float):
         query_parts.append(f'node{tag_filter}(around:{int(radius_m)},{lat},{lon});')
 
     query = f"""
-    [out:json][timeout:20];
+    [out:json][timeout:12];
     (
       {"".join(query_parts)}
     );
-    out center 200;
+    out 100;
     """
 
     response = requests.post(
         "https://overpass-api.de/api/interpreter",
         data=query,
         headers={"User-Agent": "Utrahacks-MVP/1.0 (student project)"},
-        timeout=25
+        timeout=18
     )
     response.raise_for_status()
     data = response.json()
