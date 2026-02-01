@@ -53,6 +53,18 @@
     depends_on:
       - orchestrator
 
+  precache:
+    build: ./mcp_server
+    command: python /app/scripts/precache_amenities.py
+    environment:
+      - MCP_URL=http://mcp_server:7000/mcp
+    volumes:
+      - ./mcp_server:/app
+      - ./scripts:/app/scripts
+    depends_on:
+      - mcp_server
+      - mongo
+
 volumes:
   mongo_data:
   frontend_node_modules:
