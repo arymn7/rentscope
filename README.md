@@ -1,6 +1,26 @@
-﻿# Toronto Student Housing Map Assistant (MCP-based, multi-agent)
+# RentScope 🗺️🏠  
+### Toronto Student Housing Map Assistant (MCP-based, multi-agent)
 
-Hackathon-ready MVP monorepo for a ranked housing shortlist assistant. Students add candidate locations, then multi-agent reasoning (Gemini) ranks options using MCP tools that access data. Frontend never touches Snowflake/TTC/TPS directly.
+**RentScope** is a map-first assistant that helps students choose neighbourhoods by visualizing rent, commute, safety signals, and amenities; producing **ranked, explainable recommendations** instead of scattered listings.
+
+## Why RentScope
+
+Finding student housing is chaotic:
+- Rent alone doesn’t tell the full story
+- Commute time, safety, and amenities matter differently for everyone
+- “Safety” and “livability” are hard to compare objectively
+- Most tools force tab-hopping and gut-feel decisions
+
+RentScope turns those tradeoffs into a **calm, visual map experience** with **clear reasoning** behind every recommendation.
+
+## What It Does
+
+- Students add the places they care about most (campus, work, etc.)
+- RentScope generates:
+  - A **rent heatmap**
+  - **Ranked neighbourhood shortlists**
+  - Evidence-backed explanations for each score
+- Users can explore neighbourhoods, compare tradeoffs, and understand *why* one area outranks another
 
 ## Repo Structure
 - `frontend/` — Next.js + Tailwind + Leaflet
