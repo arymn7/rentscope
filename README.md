@@ -1,6 +1,7 @@
-# RentScope 🗺️🏠  
-### Toronto Student Housing Map Assistant (MCP-based, multi-agent)
+# RentScope 🗺️🏠
 
+Devpost: https://devpost.com/software/soft-submission
+### Toronto Student Housing Map Assistant (MCP-based, multi-agent)
 **RentScope** is a map-first assistant that helps students choose neighbourhoods by visualizing rent, commute, safety signals, and amenities; producing **ranked, explainable recommendations** instead of scattered listings.
 
 ## Why RentScope
